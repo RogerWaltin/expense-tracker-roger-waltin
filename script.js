@@ -39,9 +39,13 @@ const filterType = document.getElementById('filter-type');
 const filterCategory = document.getElementById('filter-category');
 const submitBtn = document.getElementById('submit-btn');
 
+const monthlySummaryEl = document.getElementById('monthly-summary');
+const chartContainerEl = document.getElementById('chart-container');
+
 // State
 let transactions = loadTransactions();
 let editingId = null;
+let categoryChart = null;
 
 // Data operations
 function loadTransactions() {
@@ -176,10 +180,133 @@ function renderSummary() {
   totalExpenseEl.textContent = `-${formatCurrency(expense)}`;
 }
 
+// Monthly Expense Summary
+function calculateMonthlyExpenses() {
+  return transactions
+    .filter(({ type }) => type === 'expense')
+    .reduce((grouped, { amount, date }) => {
+      const d = new Date(date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = d.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+      grouped[key] = grouped[key] || { label, total: 0 };
+      grouped[key].total += amount;
+      return grouped;
+    }, {});
+}
+
+function renderMonthlySummary() {
+  const grouped = calculateMonthlyExpenses();
+  const months = Object.keys(grouped).sort().reverse();
+
+  if (months.length === 0) {
+    monthlySummaryEl.innerHTML = '<p class="empty-message">No expense data yet.</p>';
+    return;
+  }
+
+  monthlySummaryEl.innerHTML = months
+    .map(key => {
+      const { label, total } = grouped[key];
+      return `
+        <div class="monthly-item">
+          <span class="monthly-label">${label}</span>
+          <span class="monthly-amount">${formatCurrency(total)}</span>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+// Category-wise Expense Chart
+function calculateCategoryExpenses() {
+  return transactions
+    .filter(({ type }) => type === 'expense')
+    .reduce((grouped, { category, amount }) => {
+      grouped[category] = (grouped[category] || 0) + amount;
+      return grouped;
+    }, {});
+}
+
+const CHART_COLORS = [
+  '#e74c3c', '#2980b9', '#27ae60', '#f39c12',
+  '#8e44ad', '#16a085', '#d35400', '#2c3e50'
+];
+
+function renderCategoryChart() {
+  const grouped = calculateCategoryExpenses();
+  const labels = Object.keys(grouped);
+  const data = Object.values(grouped);
+
+  const emptyMsg = chartContainerEl.querySelector('.empty-message');
+
+  if (labels.length === 0) {
+    if (categoryChart) {
+      categoryChart.destroy();
+      categoryChart = null;
+    }
+    if (!emptyMsg) {
+      chartContainerEl.innerHTML = '<p class="empty-message">No expense data yet.</p>';
+    }
+    return;
+  }
+
+  if (emptyMsg) {
+    chartContainerEl.innerHTML = '<canvas id="category-chart"></canvas>';
+  }
+
+  const canvas = chartContainerEl.querySelector('canvas');
+  const ctx = canvas.getContext('2d');
+
+  if (categoryChart) {
+    categoryChart.data.labels = labels;
+    categoryChart.data.datasets[0].data = data;
+    categoryChart.data.datasets[0].backgroundColor = labels.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]);
+    categoryChart.update();
+    return;
+  }
+
+  categoryChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [
+        {
+          data,
+          backgroundColor: labels.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+          borderWidth: 1,
+          borderColor: '#fff'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            padding: 16,
+            font: { size: 13 }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: (tooltipItem) => {
+              const value = tooltipItem.parsed;
+              return ` ${tooltipItem.label}: ${formatCurrency(value)}`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
 function renderAll() {
   populateFilterCategories();
   renderSummary();
   renderTransactions();
+  renderMonthlySummary();
+  renderCategoryChart();
 }
 
 // Form operations

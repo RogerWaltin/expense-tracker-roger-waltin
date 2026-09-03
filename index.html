@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Expense Tracker</title>
   <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <div class="container">
@@ -24,6 +25,20 @@
           <h3>Expenses</h3>
           <p id="total-expense" class="money expense">-$0.00</p>
         </div>
+      </div>
+    </section>
+
+    <section class="monthly-summary-section">
+      <h2>Monthly Expense Summary</h2>
+      <div id="monthly-summary" class="monthly-summary">
+        <p class="empty-message">No expense data yet.</p>
+      </div>
+    </section>
+
+    <section class="chart-section">
+      <h2>Expenses by Category</h2>
+      <div id="chart-container" class="chart-container">
+        <p class="empty-message">No expense data yet.</p>
       </div>
     </section>
 
