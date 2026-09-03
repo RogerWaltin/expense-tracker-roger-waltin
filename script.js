@@ -41,11 +41,13 @@ const submitBtn = document.getElementById('submit-btn');
 
 const monthlySummaryEl = document.getElementById('monthly-summary');
 const chartContainerEl = document.getElementById('chart-container');
+const monthSelector = document.getElementById('month-selector');
 
 // State
 let transactions = loadTransactions();
 let editingId = null;
 let categoryChart = null;
+let selectedMonth = null;
 
 // Data operations
 function loadTransactions() {
@@ -96,11 +98,15 @@ function calculateSummary() {
 }
 
 // Formatting helpers
+const inrFormatter = new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
+});
+
 function formatCurrency(amount) {
-  return amount.toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD'
-  });
+  return inrFormatter.format(amount);
 }
 
 function formatDate(dateString) {
@@ -149,10 +155,12 @@ function renderTransactions() {
   filtered.forEach(transaction => {
     const { id, type, description, category, amount, date } = transaction;
     const sign = type === 'income' ? '+' : '-';
+    const badgeLetter = (category[0] || '?').toUpperCase();
 
     const item = document.createElement('div');
     item.className = 'transaction-item';
     item.innerHTML = `
+      <span class="transaction-category-badge ${type}" title="${category}">${badgeLetter}</span>
       <div class="transaction-info">
         <div class="transaction-description">${description}</div>
         <div class="transaction-meta">${category} · ${formatDate(date)}</div>
@@ -181,45 +189,86 @@ function renderSummary() {
 }
 
 // Monthly Expense Summary
-function calculateMonthlyExpenses() {
-  return transactions
-    .filter(({ type }) => type === 'expense')
-    .reduce((grouped, { amount, date }) => {
-      const d = new Date(date);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const label = d.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
-      grouped[key] = grouped[key] || { label, total: 0 };
-      grouped[key].total += amount;
-      return grouped;
-    }, {});
+function monthKeyOf(dateString) {
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return null;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthLabel(key) {
+  const [year, month] = key.split('-').map(Number);
+  const d = new Date(year, month - 1, 1);
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+}
+
+function getAvailableMonths() {
+  const keys = new Set();
+  transactions.forEach(t => {
+    const key = monthKeyOf(t.date);
+    if (key) keys.add(key);
+  });
+  return Array.from(keys).sort().reverse();
+}
+
+function populateMonthSelector() {
+  const months = getAvailableMonths();
+
+  if (months.length === 0) {
+    monthSelector.innerHTML = '<option value="">No months available</option>';
+    monthSelector.disabled = true;
+    selectedMonth = null;
+    return;
+  }
+
+  monthSelector.disabled = false;
+  monthSelector.innerHTML = months
+    .map(key => `<option value="${key}">${monthLabel(key)}</option>`)
+    .join('');
+
+  if (!selectedMonth || !months.includes(selectedMonth)) {
+    selectedMonth = months[0];
+  }
+  monthSelector.value = selectedMonth;
+}
+
+function getExpensesForMonth(monthKey) {
+  return transactions.filter(
+    t => t.type === 'expense' && monthKeyOf(t.date) === monthKey
+  );
+}
+
+function calculateMonthlyTotal(monthKey) {
+  return getExpensesForMonth(monthKey).reduce((total, { amount }) => total + amount, 0);
 }
 
 function renderMonthlySummary() {
-  const grouped = calculateMonthlyExpenses();
-  const months = Object.keys(grouped).sort().reverse();
+  populateMonthSelector();
 
-  if (months.length === 0) {
+  if (!selectedMonth) {
     monthlySummaryEl.innerHTML = '<p class="empty-message">No expense data yet.</p>';
     return;
   }
 
-  monthlySummaryEl.innerHTML = months
-    .map(key => {
-      const { label, total } = grouped[key];
-      return `
-        <div class="monthly-item">
-          <span class="monthly-label">${label}</span>
-          <span class="monthly-amount">${formatCurrency(total)}</span>
-        </div>
-      `;
-    })
-    .join('');
+  const total = calculateMonthlyTotal(selectedMonth);
+  const count = getExpensesForMonth(selectedMonth).length;
+
+  if (count === 0) {
+    monthlySummaryEl.innerHTML = '<p class="empty-message">No expenses recorded for this month.</p>';
+    return;
+  }
+
+  monthlySummaryEl.innerHTML = `
+    <div class="monthly-total-card">
+      <span class="monthly-label">Total for ${monthLabel(selectedMonth)}</span>
+      <span class="monthly-amount">${formatCurrency(total)}</span>
+    </div>
+    <div class="monthly-count">${count} expense${count === 1 ? '' : 's'} recorded</div>
+  `;
 }
 
 // Category-wise Expense Chart
 function calculateCategoryExpenses() {
-  return transactions
-    .filter(({ type }) => type === 'expense')
+  return getExpensesForMonth(selectedMonth || '')
     .reduce((grouped, { category, amount }) => {
       grouped[category] = (grouped[category] || 0) + amount;
       return grouped;
@@ -296,6 +345,9 @@ function renderCategoryChart() {
             }
           }
         }
+      },
+      layout: {
+        padding: 8
       }
     }
   });
@@ -402,6 +454,11 @@ typeSelect.addEventListener('change', () => populateCategories(typeSelect.value)
 filterType.addEventListener('change', renderTransactions);
 filterCategory.addEventListener('change', renderTransactions);
 form.addEventListener('submit', addTransaction);
+monthSelector.addEventListener('change', () => {
+  selectedMonth = monthSelector.value || null;
+  renderMonthlySummary();
+  renderCategoryChart();
+});
 
 // Initialization
 function init() {
