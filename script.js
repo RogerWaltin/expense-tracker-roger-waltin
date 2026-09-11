@@ -129,7 +129,13 @@ function populateCategories(type) {
 }
 
 function populateFilterCategories() {
-  const categories = new Set(transactions.map(t => t.category));
+  const selectedType = filterType.value;
+
+  const categories = new Set(
+    transactions
+      .filter(t => selectedType === 'all' || t.type === selectedType)
+      .map(t => t.category)
+  );
   const options = ['<option value="all">All Categories</option>'];
 
   categories.forEach(category => {
@@ -451,7 +457,7 @@ function deleteTransaction(id) {
 
 // Event listeners
 typeSelect.addEventListener('change', () => populateCategories(typeSelect.value));
-filterType.addEventListener('change', renderTransactions);
+filterType.addEventListener('change', () => {renderTransactions(); populateFilterCategories()});
 filterCategory.addEventListener('change', renderTransactions);
 form.addEventListener('submit', addTransaction);
 monthSelector.addEventListener('change', () => {
